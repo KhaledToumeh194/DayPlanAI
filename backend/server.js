@@ -176,7 +176,123 @@ app.delete("/api/tasks/:id", (req, res) => {
 
   res.status(204).end();
 });
+app.post("/api/plans/generate", (req, res) => {
+  const { inputText } = req.body;
 
+  if (!inputText || !inputText.trim()) {
+    return res.status(400).json({
+      error: "inputText is required",
+    });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const planResult = db
+    .prepare(`
+      INSERT INTO plans (
+        plan_date,
+        input_text
+      )
+      VALUES (?, ?)
+    `)
+    .run(today, inputText.trim());
+
+  const planId = Number(planResult.lastInsertRowid);
+
+  const fakePlanItems = [
+    {
+      title: "Work on university project",
+      detail: "Focus on the unfinished results section.",
+      estimatedMinutes: 90,
+      position: 1,
+      reason: "High priority and deadline is close",
+    },
+    {
+      title: "Apply for one job",
+      detail: "Complete one focused application.",
+      estimatedMinutes: 45,
+      position: 2,
+      reason: "Keeps weekly job-search progress moving",
+    },
+    {
+      title: "Review React course",
+      detail: "Continue the current course module.",
+      estimatedMinutes: 60,
+      position: 3,
+      reason: "Important, but less urgent than the project",
+    },
+  ];
+
+  const insertItem = db.prepare(`
+    INSERT INTO plan_items (
+      plan_id,
+      task_id,
+      title,
+      detail,
+      estimated_minutes,
+      position,
+      completed,
+      reason
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+  `);
+
+  for (const item of fakePlanItems) {
+    insertItem.run(
+      planId,
+      null,
+      item.title,
+      item.detail,
+      item.estimatedMinutes,
+      item.position,
+      item.reason
+    );
+  }
+
+  const savedPlan = db
+    .prepare(`
+      SELECT
+        id,
+        plan_date,
+        input_text,
+        created_at
+      FROM plans
+      WHERE id = ?
+    `)
+    .get(planId);
+
+  const savedItems = db
+    .prepare(`
+      SELECT
+        id,
+        title,
+        detail,
+        estimated_minutes,
+        position,
+        completed,
+        reason
+      FROM plan_items
+      WHERE plan_id = ?
+      ORDER BY position ASC
+    `)
+    .all(planId);
+
+  res.status(201).json({
+    id: savedPlan.id,
+    planDate: savedPlan.plan_date,
+    inputText: savedPlan.input_text,
+    createdAt: savedPlan.created_at,
+    items: savedItems.map((item) => ({
+      id: item.id,
+      title: item.title,
+      detail: item.detail,
+      estimatedMinutes: item.estimated_minutes,
+      position: item.position,
+      completed: Boolean(item.completed),
+      reason: item.reason,
+    })),
+  });
+});
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

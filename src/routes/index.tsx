@@ -1,12 +1,10 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Check, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
   formatToday,
-  initialPlan,
-  initialTasks,
   type PlanItem,
   type Task,
 } from "@/lib/data";
@@ -33,6 +31,24 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
+const API_URL = "http://localhost:3001";
+
+type GeneratedPlanResponse = {
+  id: number;
+  planDate: string;
+  inputText: string;
+  createdAt: string;
+  items: {
+    id: number;
+    title: string;
+    detail: string | null;
+    estimatedMinutes: number | null;
+    position: number;
+    completed: boolean;
+    reason: string | null;
+  }[];
+};
+
 function StatusMark({ status }: { status: PlanItem["status"] }) {
   if (status === "done") {
     return (
@@ -56,23 +72,45 @@ function StatusMark({ status }: { status: PlanItem["status"] }) {
 }
 
 function Dashboard() {
-  // TEMPORARY MOCK DATA
-  //
-  // Later:
-  // tasks -> GET /api/tasks
-  // plan  -> GET /api/plans/today
-  const [plan, setPlan] = useState<PlanItem[]>(() => initialPlan);
-  const [tasks, setTasks] = useState<Task[]>(() => initialTasks);
+  const [plan, setPlan] = useState<PlanItem[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
-  const [plate, setPlate] = useState(
-    "University project due Friday — results section still rough. React course due Sunday. Reply to CelVion client. Apply to 2 more jobs this week. Dentist appointment Thursday."
-  );
+  const [plate, setPlate] = useState("");
 
-  const [generatedFrom, setGeneratedFrom] = useState<string | null>(plate);
+  const [generatedFrom, setGeneratedFrom] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
 
-  const [generatedAt, setGeneratedAt] = useState<Date | null>(
-    () => new Date()
-  );
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadTasks() {
+      try {
+        setTasksLoading(true);
+        setTasksError(null);
+
+        const response = await fetch(`${API_URL}/api/tasks`);
+
+        if (!response.ok) {
+          throw new Error("Failed to load tasks");
+        }
+
+        const data: Task[] = await response.json();
+
+        setTasks(data);
+      } catch (error) {
+        console.error("Failed to load tasks:", error);
+        setTasksError("Could not load tasks.");
+      } finally {
+        setTasksLoading(false);
+      }
+    }
+
+    loadTasks();
+  }, []);
 
   const completedPlanItems = useMemo(
     () => plan.filter((item) => item.status === "done").length,
@@ -85,44 +123,56 @@ function Dashboard() {
   );
 
   function togglePlanItem(id: PlanItem["id"]) {
-    // TEMPORARY:
-    // Later this should update the generated plan item
-    // through the backend / database.
-
     setPlan((currentPlan) =>
       currentPlan.map((item) =>
         item.id === id
           ? {
               ...item,
-              status:
-                item.status === "done"
-                  ? "upcoming"
-                  : "done",
+              status: item.status === "done" ? "upcoming" : "done",
             }
           : item
       )
     );
   }
 
-  function toggleTask(id: Task["id"]) {
-    // TEMPORARY:
-    //
-    // Later:
-    // PATCH /api/tasks/:id
+  async function toggleTask(id: Task["id"]) {
+    const task = tasks.find((task) => task.id === id);
 
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === id
-          ? {
-              ...task,
-              completed: !task.completed,
-            }
-          : task
-      )
-    );
+    if (!task) {
+      return;
+    }
+
+    try {
+      setTasksError(null);
+
+      const response = await fetch(`${API_URL}/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          completed: !task.completed,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update task");
+      }
+
+      const updatedTask: Task = await response.json();
+
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === id ? updatedTask : task
+        )
+      );
+    } catch (error) {
+      console.error("Failed to update task:", error);
+      setTasksError("Could not update task.");
+    }
   }
 
-  function generatePlan(event: FormEvent<HTMLFormElement>) {
+  async function generatePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const input = plate.trim();
@@ -131,36 +181,60 @@ function Dashboard() {
       return;
     }
 
-    // TEMPORARY MOCK BEHAVIOR:
-    //
-    // Right now clicking Generate simply displays initialPlan.
-    //
-    // Later this becomes:
-    //
-    // POST /api/plans/generate
-    //
-    // Body:
-    // {
-    //   inputText: input
-    // }
-    //
-    // Express
-    //   -> reads tasks
-    //   -> calls Gemini
-    //   -> validates response
-    //   -> stores plan in SQLite
-    //   -> returns generated plan
+    try {
+      setIsGenerating(true);
+      setGenerateError(null);
 
-    setGeneratedFrom(input);
-    setGeneratedAt(new Date());
+      const response = await fetch(`${API_URL}/api/plans/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputText: input,
+        }),
+      });
 
-    // Clone the mock plan instead of sharing the same array reference.
-    setPlan(initialPlan.map((item) => ({ ...item })));
+      if (!response.ok) {
+        throw new Error("Failed to generate plan");
+      }
+
+      const data: GeneratedPlanResponse = await response.json();
+
+      const convertedPlan: PlanItem[] = data.items.map((item, index) => ({
+        id: String(item.id),
+        time: "",
+        title: item.title,
+        detail: item.detail ?? "",
+        duration:
+          item.estimatedMinutes !== null
+            ? `${item.estimatedMinutes} min`
+            : "",
+        status: item.completed
+          ? "done"
+          : index === 0
+            ? "active"
+            : "upcoming",
+      }));
+
+      setPlan(convertedPlan);
+      setGeneratedFrom(data.inputText);
+
+      const parsedDate = new Date(data.createdAt);
+
+      setGeneratedAt(
+        Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate
+      );
+    } catch (error) {
+      console.error("Failed to generate plan:", error);
+      setGenerateError("Could not generate today's plan.");
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   return (
     <div>
-      {/* Header */}
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 border-b border-border pb-6">
         <div className="min-w-0">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -182,7 +256,6 @@ function Dashboard() {
         </p>
       </header>
 
-      {/* What's on your plate */}
       <section className="mt-8">
         <form onSubmit={generatePlan}>
           <label
@@ -202,22 +275,21 @@ function Dashboard() {
             value={plate}
             onChange={(event) => setPlate(event.target.value)}
             rows={4}
-            placeholder="e.g. React course due Sunday, university project due Friday, reply to client, apply to 2 more jobs this week, dentist appointment Thursday."
+            placeholder="e.g. React course due Sunday, university project due Friday, reply to client, apply to 2 more jobs this week..."
             className="mt-4 w-full resize-y border border-input bg-card px-4 py-3 text-sm leading-relaxed outline-hidden transition-colors placeholder:text-muted-foreground focus:border-ring"
           />
 
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <button
               type="submit"
-              disabled={!plate.trim()}
+              disabled={!plate.trim() || isGenerating}
               className="inline-flex items-center gap-2 bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Sparkles
-                className="size-4"
-                aria-hidden="true"
-              />
+              <Sparkles className="size-4" aria-hidden="true" />
 
-              Generate today's plan
+              {isGenerating
+                ? "Generating..."
+                : "Generate today's plan"}
             </button>
 
             {generatedFrom && generatedAt && (
@@ -231,10 +303,15 @@ function Dashboard() {
               </span>
             )}
           </div>
+
+          {generateError && (
+            <p className="mt-3 text-sm text-destructive">
+              {generateError}
+            </p>
+          )}
         </form>
       </section>
 
-      {/* Today's plan */}
       {generatedFrom && (
         <section className="mt-10">
           <div className="flex items-baseline justify-between gap-4">
@@ -304,9 +381,7 @@ function Dashboard() {
         </section>
       )}
 
-      {/* Bottom section */}
       <section className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-2">
-        {/* Active tasks */}
         <div>
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="font-display text-2xl font-semibold tracking-tight">
@@ -319,12 +394,21 @@ function Dashboard() {
             >
               View all
 
-              <ArrowRight
-                className="size-3"
-                aria-hidden="true"
-              />
+              <ArrowRight className="size-3" aria-hidden="true" />
             </Link>
           </div>
+
+          {tasksLoading && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Loading tasks...
+            </p>
+          )}
+
+          {tasksError && (
+            <p className="mt-4 text-sm text-destructive">
+              {tasksError}
+            </p>
+          )}
 
           <ul className="mt-4 divide-y divide-border border-y border-border">
             {activeTasks.slice(0, 5).map((task) => (
@@ -336,9 +420,7 @@ function Dashboard() {
                   className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/60"
                 >
                   <span className="grid size-4 shrink-0 place-items-center border border-border bg-card">
-                    <span className="sr-only">
-                      Incomplete
-                    </span>
+                    <span className="sr-only">Incomplete</span>
                   </span>
 
                   <span className="min-w-0 flex-1 truncate text-sm">
@@ -359,7 +441,7 @@ function Dashboard() {
               </li>
             ))}
 
-            {activeTasks.length === 0 && (
+            {!tasksLoading && activeTasks.length === 0 && (
               <li className="py-8 text-center text-sm text-muted-foreground">
                 No active tasks.
               </li>
@@ -367,7 +449,6 @@ function Dashboard() {
           </ul>
         </div>
 
-        {/* Focus summary */}
         <div>
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="font-display text-2xl font-semibold tracking-tight">
@@ -388,8 +469,9 @@ function Dashboard() {
             <div className="mt-4 h-px w-full bg-border" />
 
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              The plan above weights your mornings toward deep work and keeps
-              late afternoon free for applications and reading.
+              Your generated plan will eventually use your tasks, deadlines,
+              calendar, and other context to decide what deserves attention
+              today.
             </p>
           </div>
         </div>
