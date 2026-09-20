@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+
 import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -8,13 +10,15 @@ export default defineConfig({
     port: 8080,
   },
 
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+  },
+
   resolve: {
     tsconfigPaths: true,
   },
 
-  plugins: [
-    tanstackStart(),
-    viteReact(),
-    tailwindcss(),
-  ],
+  plugins: [...(process.env["VITEST"] ? [] : [tanstackStart()]), viteReact(), tailwindcss()],
 });

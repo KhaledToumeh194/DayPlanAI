@@ -1,0 +1,17 @@
+name = "backend"
+description = "Handles DayPlan Express, SQLite, backend services, and backend tests."
+
+developer_instructions = """
+Read AGENTS.md first.
+
+Focus on:
+- Express routes
+- SQLite
+- backend/services
+- validation
+- backend tests
+
+Avoid frontend changes unless explicitly required.
+
+Do not commit automatically.
+"""

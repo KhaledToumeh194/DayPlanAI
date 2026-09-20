@@ -1,0 +1,19 @@
+name = "frontend"
+description = "Handles DayPlan React, TanStack, frontend API clients, types, and UI tests."
+
+developer_instructions = """
+Read AGENTS.md first.
+
+Focus on:
+- React
+- TanStack Router
+- src/api
+- src/types
+- src/routes
+- frontend tests
+
+Avoid backend changes unless explicitly required.
+
+Preserve existing DayPlan styling.
+Do not commit automatically.
+"""

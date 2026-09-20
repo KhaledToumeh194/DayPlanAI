@@ -78,14 +78,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "DayPlan is a minimal daily-planning app: an AI-generated plan for today, your active tasks, and your ongoing goals in one calm place.",
-      },
+"DayPlan is an intelligent daily-planning app for creating realistic plans, managing tasks, and learning from your planning history.",      },
       { property: "og:title", content: "DayPlan — a calm personal planner for your day" },
       {
         property: "og:description",
         content:
-          "A minimal daily-planning app: an AI-generated plan for today, your active tasks, and your ongoing goals in one calm place.",
-      },
+"An intelligent daily planner for realistic plans, active tasks, and planning history.",      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

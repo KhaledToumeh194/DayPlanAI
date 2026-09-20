@@ -15,12 +15,6 @@ export type Task = {
   completed: boolean;
 };
 
-export type Goal = {
-  id: string;
-  title: string;
-  note?: string;
-};
-
 export const initialPlan: PlanItem[] = [
   {
     id: "p1",
@@ -99,23 +93,6 @@ export const initialTasks: Task[] = [
     dueDate: "2026-09-24",
     priority: "low",
     completed: false,
-  },
-];
-export const initialGoals: Goal[] = [
-  {
-    id: "g1",
-    title: "Finish university project by Friday",
-    note: "Results + discussion chapters remaining. Aim for a full draft Thursday night.",
-  },
-  {
-    id: "g2",
-    title: "Apply to 3 jobs this week",
-    note: "Northwind and Helios shortlisted; find one more by Wednesday.",
-  },
-  {
-    id: "g3",
-    title: "Read 30 minutes every evening",
-    note: "Currently: 'Designing Data-Intensive Applications'.",
   },
 ];
 

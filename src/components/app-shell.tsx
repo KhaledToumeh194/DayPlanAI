@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { title: "Today", to: "/", icon: CalendarDays },
-  { title: "History", to: "/goals", icon: Target },
-  { title: "Task list", to: "/tasks", icon: ListTodo },
+{ title: "History", to: "/history", icon: Target },
+{ title: "Task list", to: "/tasks", icon: ListTodo },
 ] as const;
 
 function useTheme() {

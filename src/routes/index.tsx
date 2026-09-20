@@ -1,13 +1,36 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Check, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Sparkles,
+} from "lucide-react";
+
+import {
+  getTasks,
+  updateTask,
+} from "@/api/tasks";
+
+import {
+  generatePlan,
+  getTodayPlan,
+  updatePlanItem,
+} from "@/api/plans";
+
+import type { Task } from "@/types/task";
+import type {
+  Plan,
+  PlanItem,
+  PlanItemStatus,
+} from "@/types/plan";
 
 import { cn } from "@/lib/utils";
-import {
-  formatToday,
-  type PlanItem,
-  type Task,
-} from "@/lib/data";
+import { formatToday } from "@/lib/data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -16,163 +39,86 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Today's AI-generated plan, your active tasks, and a calm start to the day.",
+          "Today's plan, active tasks, and current priorities.",
       },
-      { property: "og:title", content: "Today — DayPlan" },
-      {
-        property: "og:description",
-        content:
-          "Today's AI-generated plan, your active tasks, and a calm start to the day.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Dashboard,
 });
 
-const API_URL = "http://localhost:3001";
-
-type GeneratedPlanResponse = {
-  id: number;
-  planDate: string;
-  inputText: string;
-  createdAt: string;
-  items: {
-    id: number;
-    title: string;
-    detail: string | null;
-    estimatedMinutes: number | null;
-    position: number;
-    completed: boolean;
-    reason: string | null;
-  }[];
-};
-
-function StatusMark({ status }: { status: PlanItem["status"] }) {
-  if (status === "done") {
-    return (
-      <span className="grid size-5 shrink-0 place-items-center bg-primary text-primary-foreground">
-        <Check className="size-3" aria-hidden="true" />
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={cn(
-        "size-5 shrink-0 border",
-        status === "active"
-          ? "border-primary bg-accent"
-          : "border-border bg-card"
-      )}
-      aria-hidden="true"
-    />
-  );
-}
-
 function Dashboard() {
-  const [plan, setPlan] = useState<PlanItem[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [plan, setPlan] = useState<Plan | null>(null);
 
   const [plate, setPlate] = useState("");
 
-  const [generatedFrom, setGeneratedFrom] = useState<string | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
-
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
-
   const [tasksLoading, setTasksLoading] = useState(true);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const [tasksError, setTasksError] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadTasks() {
-      try {
-        setTasksLoading(true);
-        setTasksError(null);
-
-        const response = await fetch(`${API_URL}/api/tasks`);
-
-        if (!response.ok) {
-          throw new Error("Failed to load tasks");
-        }
-
-        const data: Task[] = await response.json();
-
-        setTasks(data);
-      } catch (error) {
-        console.error("Failed to load tasks:", error);
-        setTasksError("Could not load tasks.");
-      } finally {
-        setTasksLoading(false);
-      }
-    }
-
     loadTasks();
+    loadTodayPlan();
   }, []);
 
-  const completedPlanItems = useMemo(
-    () => plan.filter((item) => item.status === "done").length,
-    [plan]
-  );
+  async function loadTasks() {
+    try {
+      setTasksLoading(true);
+      setTasksError(null);
+
+      const data = await getTasks();
+
+      setTasks(data);
+    } catch (error) {
+      console.error(error);
+      setTasksError("Could not load tasks.");
+    } finally {
+      setTasksLoading(false);
+    }
+  }
+
+  async function loadTodayPlan() {
+    try {
+      setPlanLoading(true);
+      setPlanError(null);
+
+      const data = await getTodayPlan();
+
+      setPlan(data);
+
+      if (data) {
+        setPlate(data.inputText);
+      }
+    } catch (error) {
+      console.error(error);
+      setPlanError("Could not load today's plan.");
+    } finally {
+      setPlanLoading(false);
+    }
+  }
 
   const activeTasks = useMemo(
-    () => tasks.filter((task) => !task.completed),
+    () =>
+      tasks.filter(
+        (task) => task.status === "active"
+      ),
     [tasks]
   );
 
-  function togglePlanItem(id: PlanItem["id"]) {
-    setPlan((currentPlan) =>
-      currentPlan.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: item.status === "done" ? "upcoming" : "done",
-            }
-          : item
-      )
-    );
-  }
+  const completedPlanItems = useMemo(
+    () =>
+      plan?.items.filter(
+        (item) => item.status === "completed"
+      ).length ?? 0,
+    [plan]
+  );
 
-  async function toggleTask(id: Task["id"]) {
-    const task = tasks.find((task) => task.id === id);
-
-    if (!task) {
-      return;
-    }
-
-    try {
-      setTasksError(null);
-
-      const response = await fetch(`${API_URL}/api/tasks/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          completed: !task.completed,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update task");
-      }
-
-      const updatedTask: Task = await response.json();
-
-      setTasks((currentTasks) =>
-        currentTasks.map((task) =>
-          task.id === id ? updatedTask : task
-        )
-      );
-    } catch (error) {
-      console.error("Failed to update task:", error);
-      setTasksError("Could not update task.");
-    }
-  }
-
-  async function generatePlan(event: FormEvent<HTMLFormElement>) {
+  async function handleGeneratePlan(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     const input = plate.trim();
@@ -183,53 +129,98 @@ function Dashboard() {
 
     try {
       setIsGenerating(true);
-      setGenerateError(null);
+      setPlanError(null);
 
-      const response = await fetch(`${API_URL}/api/plans/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inputText: input,
-        }),
+      const newPlan = await generatePlan({
+        inputText: input,
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to generate plan");
-      }
-
-      const data: GeneratedPlanResponse = await response.json();
-
-      const convertedPlan: PlanItem[] = data.items.map((item, index) => ({
-        id: String(item.id),
-        time: "",
-        title: item.title,
-        detail: item.detail ?? "",
-        duration:
-          item.estimatedMinutes !== null
-            ? `${item.estimatedMinutes} min`
-            : "",
-        status: item.completed
-          ? "done"
-          : index === 0
-            ? "active"
-            : "upcoming",
-      }));
-
-      setPlan(convertedPlan);
-      setGeneratedFrom(data.inputText);
-
-      const parsedDate = new Date(data.createdAt);
-
-      setGeneratedAt(
-        Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate
-      );
+      setPlan(newPlan);
     } catch (error) {
-      console.error("Failed to generate plan:", error);
-      setGenerateError("Could not generate today's plan.");
+      console.error(error);
+      setPlanError("Could not generate today's plan.");
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function handleTaskComplete(task: Task) {
+    try {
+      setTasksError(null);
+
+      const updated = await updateTask(
+        task.id,
+        {
+          status:
+            task.status === "completed"
+              ? "active"
+              : "completed",
+        }
+      );
+
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === task.id
+            ? updated
+            : item
+        )
+      );
+    } catch (error) {
+      console.error(error);
+      setTasksError("Could not update task.");
+    }
+  }
+
+  async function handlePlanItemStatus(
+    item: PlanItem,
+    status: PlanItemStatus
+  ) {
+    try {
+      setPlanError(null);
+
+      const updated = await updatePlanItem(
+        item.id,
+        {
+          status,
+        }
+      );
+
+      setPlan((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          items: current.items.map((planItem) =>
+            planItem.id === updated.id
+              ? updated
+              : planItem
+          ),
+        };
+      });
+    } catch (error) {
+      console.error(error);
+      setPlanError("Could not update plan item.");
+    }
+  }
+
+  function getStatusLabel(
+    status: PlanItemStatus
+  ) {
+    switch (status) {
+      case "completed":
+        return "Completed";
+      case "partial":
+        return "Partial";
+      case "skipped":
+        return "Skipped";
+      case "moved":
+        return "Moved";
+      case "blocked":
+        return "Blocked";
+      default:
+        return "Planned";
     }
   }
 
@@ -247,7 +238,8 @@ function Dashboard() {
         </div>
 
         <p className="hidden shrink-0 text-right text-xs leading-relaxed text-muted-foreground sm:block">
-          {completedPlanItems} of {plan.length} plan items done
+          {completedPlanItems} of{" "}
+          {plan?.items.length ?? 0} plan items done
           <br />
 
           <span className="text-foreground">
@@ -257,7 +249,7 @@ function Dashboard() {
       </header>
 
       <section className="mt-8">
-        <form onSubmit={generatePlan}>
+        <form onSubmit={handleGeneratePlan}>
           <label
             htmlFor="plate"
             className="font-display text-2xl font-semibold tracking-tight"
@@ -266,16 +258,19 @@ function Dashboard() {
           </label>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            Dump everything on your mind — deadlines, errands, loose ends.
-            One line or ten.
+            Tell DayPlan what's going on. Deadlines,
+            exams, errands, unfinished work, or anything
+            else that matters today.
           </p>
 
           <textarea
             id="plate"
             value={plate}
-            onChange={(event) => setPlate(event.target.value)}
+            onChange={(event) =>
+              setPlate(event.target.value)
+            }
             rows={4}
-            placeholder="e.g. React course due Sunday, university project due Friday, reply to client, apply to 2 more jobs this week..."
+            placeholder="e.g. Homework due tomorrow, networking exam Friday, need to apply to one internship..."
             className="mt-4 w-full resize-y border border-input bg-card px-4 py-3 text-sm leading-relaxed outline-hidden transition-colors placeholder:text-muted-foreground focus:border-ring"
           />
 
@@ -285,96 +280,185 @@ function Dashboard() {
               disabled={!plate.trim() || isGenerating}
               className="inline-flex items-center gap-2 bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Sparkles className="size-4" aria-hidden="true" />
+              <Sparkles
+                className="size-4"
+                aria-hidden="true"
+              />
 
               {isGenerating
                 ? "Generating..."
                 : "Generate today's plan"}
             </button>
 
-            {generatedFrom && generatedAt && (
+            {plan && (
               <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-                Drafted{" "}
-                {generatedAt.toLocaleTimeString("en-GB", {
+                Saved plan ·{" "}
+                {new Date(
+                  `${plan.createdAt}Z`
+                ).toLocaleTimeString("en-GB", {
                   hour: "2-digit",
                   minute: "2-digit",
-                })}{" "}
-                · AI
+                })}
               </span>
             )}
           </div>
 
-          {generateError && (
+          {planError && (
             <p className="mt-3 text-sm text-destructive">
-              {generateError}
+              {planError}
             </p>
           )}
         </form>
       </section>
 
-      {generatedFrom && (
+      {planLoading && (
+        <p className="mt-8 text-sm text-muted-foreground">
+          Loading today's plan...
+        </p>
+      )}
+
+      {!planLoading && plan && (
         <section className="mt-10">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 className="font-display text-2xl font-semibold tracking-tight">
-              Today's plan
-            </h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <div>
+              <h2 className="font-display text-2xl font-semibold tracking-tight">
+                Today's plan
+              </h2>
+
+              {plan.workloadEstimateMinutes !== null && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  About{" "}
+                  {plan.workloadEstimateMinutes} minutes
+                  of planned work
+                </p>
+              )}
+            </div>
           </div>
 
-          <p className="mt-2 border-l-2 border-primary/60 pl-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-3 border-l-2 border-primary/60 pl-3 text-xs leading-relaxed text-muted-foreground">
             Based on what you shared:{" "}
             <span className="text-foreground">
               “
-              {generatedFrom.length > 140
-                ? `${generatedFrom.slice(0, 140).trimEnd()}…`
-                : generatedFrom}
+              {plan.inputText.length > 160
+                ? `${plan.inputText
+                    .slice(0, 160)
+                    .trimEnd()}…`
+                : plan.inputText}
               ”
             </span>
           </p>
 
           <ol className="mt-4 divide-y divide-border border-y border-border">
-            {plan.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => togglePlanItem(item.id)}
-                  aria-label={
-                    item.status === "done"
-                      ? `Mark ${item.title} as not completed`
-                      : `Mark ${item.title} as completed`
-                  }
-                  className={cn(
-                    "flex w-full items-start gap-4 py-4 text-left transition-colors hover:bg-muted/60 sm:items-center sm:gap-6",
-                    item.status === "active" && "bg-accent/50"
-                  )}
-                >
-                  <span className="w-12 shrink-0 pt-0.5 text-right font-mono text-xs text-muted-foreground sm:pt-0">
-                    {item.time}
-                  </span>
-
-                  <span className="hidden w-px self-stretch bg-border sm:block" />
+            {plan.items.map((item) => (
+              <li
+                key={item.id}
+                className="py-4"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePlanItemStatus(
+                        item,
+                        item.status === "completed"
+                          ? "planned"
+                          : "completed"
+                      )
+                    }
+                    className={cn(
+                      "mt-0.5 grid size-5 shrink-0 place-items-center border transition-colors",
+                      item.status === "completed"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card hover:border-ring"
+                    )}
+                  >
+                    {item.status === "completed" && (
+                      <Check
+                        className="size-3"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
 
                   <div className="min-w-0 flex-1">
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        item.status === "done" &&
-                          "text-muted-foreground line-through"
-                      )}
-                    >
-                      {item.title}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          item.status === "completed" &&
+                            "text-muted-foreground line-through"
+                        )}
+                      >
+                        {item.title}
+                      </p>
 
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {item.detail}
-                    </p>
+                      <span className="border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
+                        {getStatusLabel(
+                          item.status
+                        )}
+                      </span>
+                    </div>
+
+                    {item.detail && (
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {item.detail}
+                      </p>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {item.estimatedMinutes !== null && (
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {item.estimateSource === "ai"
+                            ? "~"
+                            : ""}
+                          {item.estimatedMinutes} min
+                        </span>
+                      )}
+
+                      {item.reason && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {item.reason}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <span className="hidden shrink-0 font-mono text-[11px] text-muted-foreground sm:block">
-                    {item.duration}
-                  </span>
+                  <select
+                    value={item.status}
+                    onChange={(event) =>
+                      handlePlanItemStatus(
+                        item,
+                        event.target
+                          .value as PlanItemStatus
+                      )
+                    }
+                    className="shrink-0 border border-input bg-background px-2 py-1.5 text-xs outline-hidden focus:border-ring"
+                  >
+                    <option value="planned">
+                      Planned
+                    </option>
 
-                  <StatusMark status={item.status} />
-                </button>
+                    <option value="completed">
+                      Completed
+                    </option>
+
+                    <option value="partial">
+                      Partial
+                    </option>
+
+                    <option value="skipped">
+                      Skipped
+                    </option>
+
+                    <option value="moved">
+                      Moved
+                    </option>
+
+                    <option value="blocked">
+                      Blocked
+                    </option>
+                  </select>
+                </div>
               </li>
             ))}
           </ol>
@@ -394,7 +478,10 @@ function Dashboard() {
             >
               View all
 
-              <ArrowRight className="size-3" aria-hidden="true" />
+              <ArrowRight
+                className="size-3"
+                aria-hidden="true"
+              />
             </Link>
           </div>
 
@@ -415,33 +502,45 @@ function Dashboard() {
               <li key={task.id}>
                 <button
                   type="button"
-                  onClick={() => toggleTask(task.id)}
-                  aria-label={`Mark ${task.title} as completed`}
+                  onClick={() =>
+                    handleTaskComplete(task)
+                  }
                   className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/60"
                 >
-                  <span className="grid size-4 shrink-0 place-items-center border border-border bg-card">
-                    <span className="sr-only">Incomplete</span>
-                  </span>
+                  <span className="grid size-4 shrink-0 place-items-center border border-border bg-card" />
 
                   <span className="min-w-0 flex-1 truncate text-sm">
                     {task.title}
                   </span>
 
+                  {task.estimatedMinutes !== null && (
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                      {task.estimateSource === "ai"
+                        ? "~"
+                        : ""}
+                      {task.estimatedMinutes}m
+                    </span>
+                  )}
+
                   {task.dueDate && (
                     <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                       {new Date(
                         `${task.dueDate}T00:00:00`
-                      ).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      ).toLocaleDateString(
+                        "en-GB",
+                        {
+                          day: "numeric",
+                          month: "short",
+                        }
+                      )}
                     </span>
                   )}
                 </button>
               </li>
             ))}
 
-            {!tasksLoading && activeTasks.length === 0 && (
+            {!tasksLoading &&
+              activeTasks.length === 0 && (
               <li className="py-8 text-center text-sm text-muted-foreground">
                 No active tasks.
               </li>
@@ -458,20 +557,19 @@ function Dashboard() {
 
           <div className="mt-4 border border-border bg-card p-5">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              This week
+              Planning principle
             </p>
 
             <p className="mt-2 font-display text-lg font-medium leading-snug">
-              Finish the university project draft and send two job
-              applications.
+              DayPlan suggests. You decide.
             </p>
 
             <div className="mt-4 h-px w-full bg-border" />
 
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              Your generated plan will eventually use your tasks, deadlines,
-              calendar, and other context to decide what deserves attention
-              today.
+              Estimates, priorities, and plan
+              statuses are suggestions. You can
+              adjust them as your day changes.
             </p>
           </div>
         </div>

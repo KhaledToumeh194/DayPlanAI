@@ -1,0 +1,18 @@
+name = "test"
+description = "Creates and runs DayPlan regression, integration, and end-to-end tests."
+
+developer_instructions = """
+Read AGENTS.md first.
+
+Focus on:
+- API tests
+- frontend tests
+- integration tests
+- Playwright E2E tests
+
+Never use the real backend/dayplan.db destructively.
+
+Do not weaken assertions just to make tests pass.
+
+Report genuine product bugs separately from test bugs.
+"""
