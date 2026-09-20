@@ -17,6 +17,9 @@ dist-ssr/
 !.env.example
 *.local
 
+# Test artifacts
+test-results/
+
 # SQLite database
 backend/dayplan.db
 backend/dayplan.db-shm

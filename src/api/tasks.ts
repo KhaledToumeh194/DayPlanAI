@@ -1,10 +1,6 @@
-import type {
-  CreateTaskInput,
-  Task,
-  UpdateTaskInput,
-} from "@/types/task";
+import type { CreateTaskInput, Task, UpdateTaskInput } from "@/types/task";
 
-const API_URL = "http://localhost:3001";
+const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:3001";
 
 export async function getTasks(): Promise<Task[]> {
   const response = await fetch(`${API_URL}/api/tasks`);
@@ -16,9 +12,7 @@ export async function getTasks(): Promise<Task[]> {
   return response.json();
 }
 
-export async function createTask(
-  input: CreateTaskInput
-): Promise<Task> {
+export async function createTask(input: CreateTaskInput): Promise<Task> {
   const response = await fetch(`${API_URL}/api/tasks`, {
     method: "POST",
     headers: {
@@ -34,10 +28,7 @@ export async function createTask(
   return response.json();
 }
 
-export async function updateTask(
-  id: number,
-  input: UpdateTaskInput
-): Promise<Task> {
+export async function updateTask(id: number, input: UpdateTaskInput): Promise<Task> {
   const response = await fetch(`${API_URL}/api/tasks/${id}`, {
     method: "PATCH",
     headers: {
@@ -53,9 +44,7 @@ export async function updateTask(
   return response.json();
 }
 
-export async function deleteTask(
-  id: number
-): Promise<void> {
+export async function deleteTask(id: number): Promise<void> {
   const response = await fetch(`${API_URL}/api/tasks/${id}`, {
     method: "DELETE",
   });

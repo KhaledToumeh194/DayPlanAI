@@ -1,6 +1,6 @@
 import type { GeneratePlanInput, Plan, PlanItem, UpdatePlanItemInput } from "@/types/plan";
 
-const API_URL = "http://localhost:3001";
+const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:3001";
 
 export async function getTodayPlan(): Promise<Plan | null> {
   const response = await fetch(`${API_URL}/api/plans/today`);

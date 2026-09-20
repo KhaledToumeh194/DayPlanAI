@@ -3,8 +3,8 @@ const path = require("path");
 const { createApp } = require("./app");
 const { createDatabase } = require("./database");
 
-const PORT = 3001;
-const databasePath = path.join(__dirname, "dayplan.db");
+const PORT = Number(process.env.PORT || 3001);
+const databasePath = process.env.DAYPLAN_DATABASE_PATH || path.join(__dirname, "dayplan.db");
 
 const db = createDatabase(databasePath);
 const app = createApp(db);
