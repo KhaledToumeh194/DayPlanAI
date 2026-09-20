@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const { createApp } = require("../app");
 const { createDatabase } = require("../database");
 
+const { getLocalCalendarDate } = require("../services/calendarDate");
 export function createTestContext(databasePath = ":memory:") {
   const db = createDatabase(databasePath);
 
@@ -27,14 +28,14 @@ export function createTemporaryDatabase() {
   };
 }
 
-export function todayUtc() {
-  return new Date().toISOString().slice(0, 10);
+export function todayLocal() {
+  return getLocalCalendarDate();
 }
 
 export function insertPlan(
   db,
   {
-    planDate = todayUtc(),
+    planDate = todayLocal(),
     inputText = "Seeded plan",
     workloadEstimateMinutes = 30,
     createdAt = "2026-01-01 09:00:00",

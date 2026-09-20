@@ -1,5 +1,7 @@
 const express = require("express");
 
+const { getLocalCalendarDate } = require("../services/calendarDate");
+
 module.exports = function createPlanRoutes(db) {
   const router = express.Router();
 
@@ -8,7 +10,7 @@ module.exports = function createPlanRoutes(db) {
   // --------------------------------------------------
 
   router.get("/today", (req, res) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalCalendarDate();
 
     const plan = db
       .prepare(
@@ -73,7 +75,7 @@ module.exports = function createPlanRoutes(db) {
 
     const trimmedInput = inputText.trim();
     const normalizedInput = normalizePlanInput(trimmedInput);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalCalendarDate();
 
     const latestPlan = db
       .prepare(

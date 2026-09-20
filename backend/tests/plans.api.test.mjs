@@ -6,7 +6,7 @@ import {
   createTestContext,
   insertPlan,
   insertPlanItem,
-  todayUtc,
+  todayLocal,
 } from "./helpers.mjs";
 
 describe("plan API", () => {
@@ -43,7 +43,7 @@ describe("plan API", () => {
 
     expect(generated.body).toEqual({
       id: expect.any(Number),
-      planDate: todayUtc(),
+      planDate: todayLocal(),
       inputText: "Finish the release and plan tomorrow",
       workloadEstimateMinutes: 135,
       createdAt: expect.any(String),
@@ -297,7 +297,7 @@ describe("plan API", () => {
       .expect(201);
 
     expect(generated.body.id).not.toBe(previousPlanId);
-    expect(generated.body.planDate).toBe(todayUtc());
+    expect(generated.body.planDate).toBe(todayLocal());
     expect(db.prepare("SELECT COUNT(*) AS count FROM plans").get()).toEqual({
       count: 2,
     });
@@ -331,7 +331,7 @@ describe("plan API", () => {
 
     expect(response.body).toMatchObject({
       id: latestId,
-      planDate: todayUtc(),
+      planDate: todayLocal(),
       inputText: "Latest today",
     });
     expect(response.body.items.map((item) => item.title)).toEqual(["Selected item"]);
