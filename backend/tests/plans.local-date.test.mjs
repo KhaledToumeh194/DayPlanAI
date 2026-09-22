@@ -85,4 +85,65 @@ describe("plan API local calendar dates", () => {
     const history = await request(app).get("/api/plans/history").expect(200);
     expect(history.body.map((plan) => plan.planDate)).toEqual(["2026-01-03", "2026-01-02"]);
   });
+
+  it("uses the completion local day when generation crosses midnight and deduplicates there", async () => {
+    vi.setSystemTime(new Date("2026-01-01T09:59:00.000Z"));
+
+    let releaseProvider;
+    let markProviderStarted;
+    const providerStarted = new Promise((resolve) => {
+      markProviderStarted = resolve;
+    });
+    const providerGate = new Promise((resolve) => {
+      releaseProvider = resolve;
+    });
+    const generateStructured = vi.fn(async () => {
+      markProviderStarted();
+      await providerGate;
+      return {
+        items: [
+          {
+            title: "Finish after midnight",
+            detail: "Persist this work on the local day when generation completes.",
+            estimatedMinutes: 25,
+            createsTask: true,
+            reason: "Keeps the generated plan on its intended current day.",
+          },
+        ],
+      };
+    });
+
+    db.close();
+    ({ app, db } = createTestContext(":memory:", {
+      aiService: { generateStructured },
+    }));
+
+    const pendingGeneration = request(app)
+      .post("/api/plans/generate")
+      .send({ inputText: "Cross local midnight" })
+      .then((response) => response);
+
+    await providerStarted;
+    vi.setSystemTime(new Date("2026-01-01T10:01:00.000Z"));
+    releaseProvider();
+
+    const generated = await pendingGeneration;
+    expect(generated.status).toBe(201);
+    expect(generated.body.planDate).toBe("2026-01-02");
+
+    const today = await request(app).get("/api/plans/today").expect(200);
+    expect(today.body.id).toBe(generated.body.id);
+    expect(today.body.planDate).toBe("2026-01-02");
+
+    const repeated = await request(app)
+      .post("/api/plans/generate")
+      .send({ inputText: "  cross LOCAL midnight  " })
+      .expect(200);
+
+    expect(repeated.body).toEqual(generated.body);
+    expect(generateStructured).toHaveBeenCalledTimes(1);
+    expect(db.prepare("SELECT plan_date AS planDate FROM plans").all()).toEqual([
+      { planDate: "2026-01-02" },
+    ]);
+  });
 });

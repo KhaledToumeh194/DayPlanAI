@@ -8,11 +8,49 @@ const { createApp } = require("../app");
 const { createDatabase } = require("../database");
 
 const { getLocalCalendarDate } = require("../services/calendarDate");
-export function createTestContext(databasePath = ":memory:") {
+
+export const deterministicPlan = {
+  items: [
+    {
+      title: "Work on your most urgent task",
+      detail: "Start with the closest important deadline.",
+      estimatedMinutes: 60,
+      createsTask: true,
+      reason: "Urgent work should receive attention first.",
+    },
+    {
+      title: "Continue an important ongoing task",
+      detail: "Make measurable progress without overloading the day.",
+      estimatedMinutes: 45,
+      createsTask: true,
+      reason: "Keeps longer-term work moving.",
+    },
+    {
+      title: "Review and prepare for tomorrow",
+      detail: "Finish with a short review of upcoming commitments.",
+      estimatedMinutes: 30,
+      createsTask: true,
+      reason: "Reduces tomorrow's planning pressure.",
+    },
+  ],
+};
+
+export function createDeterministicAiService(plan = deterministicPlan) {
+  return {
+    async generateStructured() {
+      return structuredClone(plan);
+    },
+  };
+}
+
+export function createTestContext(databasePath = ":memory:", options = {}) {
   const db = createDatabase(databasePath);
 
   return {
-    app: createApp(db),
+    app: createApp(db, {
+      aiService: createDeterministicAiService(),
+      ...options,
+    }),
     db,
   };
 }

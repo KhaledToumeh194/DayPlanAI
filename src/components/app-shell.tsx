@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { title: "Today", to: "/", icon: CalendarDays },
-{ title: "History", to: "/history", icon: Target },
-{ title: "Task list", to: "/tasks", icon: ListTodo },
+  { title: "History", to: "/history", icon: Target },
+  { title: "Task list", to: "/tasks", icon: ListTodo },
 ] as const;
 
 function useTheme() {
@@ -50,16 +50,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-border bg-card transition-[width] duration-200 sm:flex",
-          collapsed ? "w-16" : "w-60"
+          collapsed ? "w-16" : "w-60",
         )}
       >
-        <div className={cn("flex h-16 items-center gap-3 border-b border-border", collapsed ? "justify-center px-0" : "px-5")}>
+        <div
+          className={cn(
+            "flex h-16 items-center gap-3 border-b border-border",
+            collapsed ? "justify-center px-0" : "px-5",
+          )}
+        >
           <div className="grid size-8 shrink-0 place-items-center bg-primary font-display text-sm font-semibold text-primary-foreground">
             D
           </div>
           {!collapsed && (
             <div className="min-w-0 leading-none">
-              <p className="truncate font-display text-base font-semibold tracking-tight">DayPlan</p>
+              <p className="truncate font-display text-base font-semibold tracking-tight">
+                DayPlan
+              </p>
               <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 Personal planner
               </p>
@@ -80,7 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   collapsed && "justify-center px-0",
                   active
                     ? "bg-accent font-medium text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <item.icon className="size-4 shrink-0" />
@@ -96,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             title={collapsed ? "Toggle theme" : undefined}
             className={cn(
               "flex w-full items-center gap-3 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-              collapsed && "justify-center px-0"
+              collapsed && "justify-center px-0",
             )}
           >
             {dark ? <Sun className="size-4 shrink-0" /> : <Moon className="size-4 shrink-0" />}
@@ -107,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             title={collapsed ? "Expand sidebar" : undefined}
             className={cn(
               "flex w-full items-center gap-3 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-              collapsed && "justify-center px-0"
+              collapsed && "justify-center px-0",
             )}
           >
             {collapsed ? (
@@ -128,11 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <span className="font-display text-base font-semibold">DayPlan</span>
         </div>
-        <button
-          onClick={toggle}
-          className="p-2 text-muted-foreground"
-          aria-label="Toggle theme"
-        >
+        <button onClick={toggle} className="p-2 text-muted-foreground" aria-label="Toggle theme">
           {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
         </button>
       </div>
@@ -147,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 "flex flex-1 items-center justify-center gap-2 border-b-2 py-2.5 text-xs font-medium transition-colors",
                 active
                   ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground"
+                  : "border-transparent text-muted-foreground",
               )}
             >
               <item.icon className="size-3.5" />

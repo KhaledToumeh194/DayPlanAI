@@ -1,8 +1,15 @@
 const express = require("express");
 
 const { getLocalCalendarDate } = require("../services/calendarDate");
+const {
+  MAX_PLANNING_TASKS,
+  NEAR_TERM_DUE_DAYS,
+  PlanningContextTooLargeError,
+  buildBoundedPlanningContext,
+} = require("../services/planningContext");
+const { PlannerError } = require("../services/plannerService");
 
-module.exports = function createPlanRoutes(db) {
+module.exports = function createPlanRoutes(db, { plannerService }) {
   const router = express.Router();
 
   // --------------------------------------------------
@@ -60,11 +67,9 @@ module.exports = function createPlanRoutes(db) {
 
   // --------------------------------------------------
   // GENERATE PLAN
-  // TEMPORARY FAKE PLANNER
-  // Real AI will replace this later.
   // --------------------------------------------------
 
-  router.post("/generate", (req, res) => {
+  router.post("/generate", async (req, res, next) => {
     const { inputText } = req.body;
 
     if (typeof inputText !== "string" || !inputText.trim()) {
@@ -95,29 +100,61 @@ module.exports = function createPlanRoutes(db) {
       return res.status(200).json(formatPlan(latestPlan, existingItems));
     }
 
-    const fakePlanItems = [
-      {
-        title: "Work on your most urgent task",
-        detail: "Start with the closest important deadline.",
-        estimatedMinutes: 60,
-        reason: "Urgent work should receive attention first.",
-      },
-      {
-        title: "Continue an important ongoing task",
-        detail: "Make measurable progress without overloading the day.",
-        estimatedMinutes: 45,
-        reason: "Keeps longer-term work moving.",
-      },
-      {
-        title: "Review and prepare for tomorrow",
-        detail: "Finish with a short review of upcoming commitments.",
-        estimatedMinutes: 30,
-        reason: "Reduces tomorrow's planning pressure.",
-      },
-    ];
+    let planningContext;
+
+    try {
+      planningContext = buildBoundedPlanningContext({
+        inputText: trimmedInput,
+        tasks: getPlanningTasks(db, today),
+      });
+    } catch (error) {
+      if (error instanceof PlanningContextTooLargeError) {
+        return res.status(400).json({
+          error: "inputText is too long",
+        });
+      }
+
+      return next(error);
+    }
+
+    let generatedPlan;
+
+    try {
+      generatedPlan = await plannerService.generatePlan(planningContext);
+    } catch (error) {
+      if (error instanceof PlannerError) {
+        return res.status(error.statusCode).json({
+          error: error.publicMessage,
+        });
+      }
+
+      return next(error);
+    }
+
+    const planDate = getLocalCalendarDate();
+    const generatedItems = generatedPlan.items;
 
     const createPlan = db.transaction(() => {
-      const totalMinutes = fakePlanItems.reduce((total, item) => total + item.estimatedMinutes, 0);
+      const duplicatePlan = db
+        .prepare(
+          `
+          SELECT *
+          FROM plans
+          WHERE plan_date = ?
+          ORDER BY created_at DESC, id DESC
+          LIMIT 1
+        `,
+        )
+        .get(planDate);
+
+      if (duplicatePlan && normalizePlanInput(duplicatePlan.input_text) === normalizedInput) {
+        return {
+          planId: duplicatePlan.id,
+          created: false,
+        };
+      }
+
+      const totalMinutes = generatedItems.reduce((total, item) => total + item.estimatedMinutes, 0);
 
       const planResult = db
         .prepare(
@@ -130,7 +167,7 @@ module.exports = function createPlanRoutes(db) {
           VALUES (?, ?, ?)
         `,
         )
-        .run(today, trimmedInput, totalMinutes);
+        .run(planDate, trimmedInput, totalMinutes);
 
       const planId = Number(planResult.lastInsertRowid);
 
@@ -193,12 +230,16 @@ module.exports = function createPlanRoutes(db) {
         )
       `);
 
-      fakePlanItems.forEach((item, index) => {
-        const normalizedTitle = normalizeTaskTitle(item.title);
-        const reusableTask = findReusableTask.get(normalizedTitle);
-        const taskId = reusableTask
-          ? reusableTask.id
-          : Number(insertTask.run(item.title, item.estimatedMinutes).lastInsertRowid);
+      generatedItems.forEach((item, index) => {
+        let taskId = null;
+
+        if (item.createsTask) {
+          const normalizedTitle = normalizeTaskTitle(item.title);
+          const reusableTask = findReusableTask.get(normalizedTitle);
+          taskId = reusableTask
+            ? reusableTask.id
+            : Number(insertTask.run(item.title, item.estimatedMinutes).lastInsertRowid);
+        }
 
         insertItem.run(
           planId,
@@ -211,10 +252,13 @@ module.exports = function createPlanRoutes(db) {
         );
       });
 
-      return planId;
+      return {
+        planId,
+        created: true,
+      };
     });
 
-    const planId = createPlan();
+    const result = createPlan();
 
     const plan = db
       .prepare(
@@ -224,11 +268,11 @@ module.exports = function createPlanRoutes(db) {
         WHERE id = ?
       `,
       )
-      .get(planId);
+      .get(result.planId);
 
     const items = getPlanItems(db, plan.id);
 
-    res.status(201).json(formatPlan(plan, items));
+    res.status(result.created ? 201 : 200).json(formatPlan(plan, items));
   });
 
   // --------------------------------------------------
@@ -275,6 +319,44 @@ function normalizePlanInput(inputText) {
 
 function normalizeTaskTitle(title) {
   return title.trim().toLowerCase();
+}
+
+function getPlanningTasks(db, currentDate) {
+  return db
+    .prepare(
+      `
+      SELECT
+        title,
+        status,
+        priority,
+        due_date AS dueDate,
+        estimated_minutes AS estimatedMinutes,
+        flexibility
+      FROM tasks
+      WHERE status IN ('active', 'blocked')
+      ORDER BY
+        CASE
+          WHEN due_date IS NOT NULL AND due_date <= ? THEN 1
+          WHEN due_date IS NOT NULL AND due_date <= date(?, '+' || ? || ' days') THEN 2
+          ELSE 3
+        END,
+        CASE priority
+          WHEN 'high' THEN 1
+          WHEN 'medium' THEN 2
+          ELSE 3
+        END,
+        CASE status
+          WHEN 'blocked' THEN 1
+          WHEN 'active' THEN 2
+          ELSE 3
+        END,
+        CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+        due_date ASC,
+        id ASC
+      LIMIT ?
+    `,
+    )
+    .all(currentDate, currentDate, NEAR_TERM_DUE_DAYS, MAX_PLANNING_TASKS);
 }
 
 function getPlanItems(db, planId) {

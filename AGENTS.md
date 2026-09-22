@@ -448,6 +448,36 @@ Temporary isolated test databases may be destroyed freely.
 
 ---
 
+### system-reviewer
+
+Read-only whole-system reviewer.
+
+Use after major checkpoints or before releases to inspect:
+
+- architecture
+- product-design consistency
+- cross-layer bugs
+- persistence/data integrity
+- AI integration risks
+- security
+- concurrency
+- missing tests
+- maintainability
+
+It reports findings using `[BUG]`, `[RISK]`, `[DESIGN]`, `[TEST GAP]`, and `[CLEANUP]`.
+
+It must not change production code.
+
+### readme-maintainer
+
+Documentation-focused agent.
+
+Use after major product/architecture changes to keep `README.md` synchronized with the real implementation.
+
+It may update documentation but must not change application behavior.
+
+It must verify README claims against the actual repository and must never document planned features as already implemented.
+
 # 7. Standard Workflow
 
 For substantial features:

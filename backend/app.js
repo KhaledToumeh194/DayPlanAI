@@ -4,9 +4,13 @@ const cors = require("cors");
 const createTaskRoutes = require("./routes/tasks");
 const createPlanRoutes = require("./routes/plans");
 const createPlanItemRoutes = require("./routes/planItems");
+const { createGeminiAiProvider } = require("./services/geminiAiProvider");
+const { createPlannerService } = require("./services/plannerService");
 
-function createApp(db) {
+function createApp(db, options = {}) {
   const app = express();
+  const aiService = options.aiService || createGeminiAiProvider();
+  const plannerService = options.plannerService || createPlannerService({ aiService });
 
   app.use(cors());
   app.use(express.json());
@@ -22,7 +26,7 @@ function createApp(db) {
   });
 
   app.use("/api/tasks", createTaskRoutes(db));
-  app.use("/api/plans", createPlanRoutes(db));
+  app.use("/api/plans", createPlanRoutes(db, { plannerService }));
   app.use("/api/plan-items", createPlanItemRoutes(db));
 
   app.use((error, req, res, next) => {

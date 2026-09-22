@@ -33,7 +33,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "node backend/server.js",
+      command: "node e2e/backend.mjs",
       cwd: rootDirectory,
       env: {
         ...process.env,
